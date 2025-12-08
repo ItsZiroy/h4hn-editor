@@ -18,7 +18,10 @@ import { Highlight } from "@tiptap/extension-highlight";
 import { Subscript } from "@tiptap/extension-subscript";
 import { Superscript } from "@tiptap/extension-superscript";
 import { Selection } from "@tiptap/extensions";
-import { Mathematics } from "@tiptap/extension-mathematics";
+import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
+import { all, createLowlight } from "lowlight";
+import { InlineMathExtension } from "@/components/tiptap-extension/inline-math-extension";
+import { BlockMathExtension } from "@/components/tiptap-extension/block-math-extension";
 
 // --- UI Primitives ---
 import { Button } from "@/components/tiptap-ui-primitive/button";
@@ -46,6 +49,7 @@ import { ImageUploadButton } from "@/components/tiptap-ui/image-upload-button";
 import { ListDropdownMenu } from "@/components/tiptap-ui/list-dropdown-menu";
 import { BlockquoteButton } from "@/components/tiptap-ui/blockquote-button";
 import { CodeBlockButton } from "@/components/tiptap-ui/code-block-button";
+import { MathButton } from "@/components/tiptap-ui/math-button";
 import {
   ColorHighlightPopover,
   ColorHighlightPopoverContent,
@@ -64,6 +68,7 @@ import { UndoRedoButton } from "@/components/tiptap-ui/undo-redo-button";
 import { ArrowLeftIcon } from "@/components/tiptap-icons/arrow-left-icon";
 import { HighlighterIcon } from "@/components/tiptap-icons/highlighter-icon";
 import { LinkIcon } from "@/components/tiptap-icons/link-icon";
+import { MetadataIcon } from "@/components/tiptap-icons/metadata-icon";
 
 // --- Hooks ---
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint";
@@ -82,14 +87,32 @@ import "@/components/tiptap-templates/simple/simple-editor.scss";
 const MainToolbarContent = ({
   onHighlighterClick,
   onLinkClick,
+  onBack,
+  onPublish,
+  documentId,
+  strapiAdminUrl,
+  status,
   isMobile,
 }: {
   onHighlighterClick: () => void;
   onLinkClick: () => void;
+  onBack?: () => void;
+  onPublish?: () => void;
+  documentId?: string;
+  strapiAdminUrl?: string;
+  status?: "draft" | "published" | "publishing";
   isMobile: boolean;
 }) => {
   return (
     <>
+      {onBack && (
+        <ToolbarGroup>
+          <Button data-style="ghost" onClick={onBack} aria-label="Go back">
+            <ArrowLeftIcon className="tiptap-button-icon" />
+          </Button>
+        </ToolbarGroup>
+      )}
+
       <Spacer />
 
       <ToolbarGroup>
@@ -107,6 +130,7 @@ const MainToolbarContent = ({
         />
         <BlockquoteButton />
         <CodeBlockButton />
+        <MathButton />
       </ToolbarGroup>
 
       <ToolbarSeparator />
@@ -154,6 +178,101 @@ const MainToolbarContent = ({
       <ToolbarGroup>
         <ThemeToggle />
       </ToolbarGroup>
+
+      {documentId && strapiAdminUrl && (
+        <>
+          <ToolbarSeparator />
+          <ToolbarGroup>
+            <a
+              href={`${strapiAdminUrl}/content-manager/collection-types/api::post.post/${documentId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Edit metadata in Strapi"
+              title="Edit metadata in Strapi"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "32px",
+                height: "32px",
+                borderRadius: "var(--tt-radius-xs)",
+                cursor: "pointer",
+                color: "currentColor",
+                textDecoration: "none",
+              }}
+            >
+              <MetadataIcon className="tiptap-button-icon" />
+            </a>
+          </ToolbarGroup>
+        </>
+      )}
+
+      {onPublish && (
+        <>
+          <ToolbarSeparator />
+          <ToolbarGroup>
+            <Button
+              data-style={status === "published" ? "ghost" : "primary"}
+              onClick={onPublish}
+              disabled={status === "publishing"}
+              aria-label={status === "published" ? "Published" : "Publish"}
+              style={{
+                gap: "6px",
+                paddingLeft: "12px",
+                paddingRight: "12px",
+              }}
+            >
+              {status === "publishing" ? (
+                <>
+                  <span
+                    style={{
+                      width: "14px",
+                      height: "14px",
+                      border: "2px solid currentColor",
+                      borderTopColor: "transparent",
+                      borderRadius: "50%",
+                      animation: "spin 1s linear infinite",
+                    }}
+                  />
+                  <span>Publishing...</span>
+                </>
+              ) : status === "published" ? (
+                <>
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  <span>Published</span>
+                </>
+              ) : (
+                <>
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 19V5M5 12l7-7 7 7" />
+                  </svg>
+                  <span>Publish</span>
+                </>
+              )}
+            </Button>
+          </ToolbarGroup>
+        </>
+      )}
     </>
   );
 };
@@ -187,12 +306,36 @@ const MobileToolbarContent = ({
   </>
 );
 
+const CustomImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      id: {
+        default: null,
+      },
+    };
+  },
+});
+
+// Create lowlight instance with all languages
+const lowlight = createLowlight(all);
+
 export function SimpleEditor({
   content,
   onUpdate,
+  onBack,
+  onPublish,
+  documentId,
+  strapiAdminUrl,
+  status,
 }: {
   content?: string;
   onUpdate?: (props: EditorEvents["update"]) => void;
+  onBack?: () => void;
+  onPublish?: () => void;
+  documentId?: string;
+  strapiAdminUrl?: string;
+  status?: "draft" | "published" | "publishing";
 }) {
   const isMobile = useIsBreakpoint();
   const { height } = useWindowSize();
@@ -216,19 +359,25 @@ export function SimpleEditor({
     extensions: [
       StarterKit.configure({
         horizontalRule: false,
+        codeBlock: false, // Disable default codeBlock to use CodeBlockLowlight
         link: {
           openOnClick: false,
           enableClickSelection: true,
         },
       }),
-      Mathematics.configure({}),
+
+      CodeBlockLowlight.configure({
+        lowlight,
+      }),
       HorizontalRule,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       TaskList,
       TaskItem.configure({ nested: true }),
       Highlight.configure({ multicolor: true }),
-      Image,
+      InlineMathExtension,
+      BlockMathExtension,
       Typography,
+      CustomImage,
       Superscript,
       Subscript,
       Selection,
@@ -271,6 +420,11 @@ export function SimpleEditor({
             <MainToolbarContent
               onHighlighterClick={() => setMobileView("highlighter")}
               onLinkClick={() => setMobileView("link")}
+              onBack={onBack}
+              onPublish={onPublish}
+              documentId={documentId}
+              strapiAdminUrl={strapiAdminUrl}
+              status={status}
               isMobile={isMobile}
             />
           ) : (
